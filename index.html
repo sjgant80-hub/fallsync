@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FallSync · CRDT multi-device sync</title>
+<meta name="description" content="CRDT multi-device sync. LWW-map with Lamport timestamps. No cloud. Any two devices merge deterministically.">
+<meta name="author" content="AI-Native Solutions">
+<meta name="theme-color" content="#1a1a1e">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%231a1a1e'/%3E%3Ctext x='16' y='22' font-family='serif' font-size='18' fill='%237a9c7e' text-anchor='middle'%3E%E2%97%8A%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+:root{--void:#1a1a1e;--deep:#212127;--surface:#2a2a30;--raised:#33333a;--line:rgba(232,228,219,0.08);--line2:rgba(232,228,219,0.16);--text:#e8e4db;--muted:#928d80;--dim:#6b6660;--sage:#7a9c7e;--sage-dim:rgba(122,156,126,0.14);--amber:#d4a052;--amber-dim:rgba(212,160,82,0.12);--coral:#d67a5a;--coral-glow:rgba(214,122,90,0.15);--serif:'Cormorant Garamond','Iowan Old Style',Georgia,serif;--sans:'Inter',-apple-system,system-ui,sans-serif;--mono:'JetBrains Mono','IBM Plex Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--void);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.6;min-height:100vh;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;border:none;outline:none;font-size:inherit}
+input,textarea,select{font-family:inherit;background:var(--surface);color:var(--text);border:1px solid var(--line2);outline:none;padding:8px 10px;border-radius:6px;font-size:14px}
+input:focus,textarea:focus{border-color:var(--sage)}
+h1,h2,h3{font-family:var(--serif);font-weight:400;color:var(--text);line-height:1.2}
+h1{font-size:32px;letter-spacing:0.01em}
+h1 em{color:var(--sage);font-style:italic}
+h2{font-size:20px;margin-bottom:10px}
+h2 em{color:var(--sage);font-style:italic}
+h3{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.14em;font-family:var(--mono);font-weight:500;margin-bottom:8px}
+header{background:rgba(26,26,30,0.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:16px 24px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--serif);font-size:22px}
+.brand .glyph{color:var(--sage);font-size:22px}
+.brand .co{color:var(--dim);font-family:var(--mono);font-size:9.5px;letter-spacing:0.16em;margin-left:6px;text-transform:uppercase}
+.tag{color:var(--muted);font-family:var(--mono);font-size:11px;letter-spacing:0.12em;text-transform:uppercase}
+main{max-width:1280px;margin:0 auto;padding:24px}
+.intro{margin-bottom:20px}
+.intro p{color:var(--muted);max-width:720px;margin-bottom:6px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;padding:14px 18px;background:var(--deep);border:1px solid var(--line);border-radius:12px;align-items:center}
+.controls .doc{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.controls .doc span{color:var(--sage)}
+button.btn{background:var(--sage);color:var(--void);padding:9px 16px;border-radius:8px;font-family:var(--mono);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;font-weight:700;transition:all .15s}
+button.btn:hover{background:#8db091}
+button.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line2)}
+button.btn.ghost:hover{border-color:var(--sage);color:var(--sage)}
+button.btn.amber{background:var(--amber);color:var(--void)}
+button.btn.amber:hover{background:#e2b060}
+button.btn.coral{background:var(--coral);color:var(--void)}
+button.btn.coral:hover{background:#e28a6a}
+.grid{display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.device{background:var(--deep);border:1px solid var(--line);border-radius:14px;padding:20px}
+.device.a{border-color:rgba(122,156,126,0.3)}
+.device.b{border-color:rgba(212,160,82,0.3)}
+.device h2{margin-bottom:4px}
+.device .id{font-family:var(--mono);font-size:10.5px;color:var(--dim);letter-spacing:0.08em;margin-bottom:14px;word-break:break-all}
+.device .clock{color:var(--sage);font-family:var(--mono);font-size:11px;margin-bottom:12px}
+.device.b .clock{color:var(--amber)}
+.row{display:flex;gap:6px;margin-bottom:8px}
+.row input{flex:1;min-width:0}
+.row input.k{flex:0 0 34%}
+.middle{display:flex;flex-direction:column;gap:10px;align-items:center;padding-top:80px}
+@media(max-width:900px){.middle{padding-top:0}}
+.middle button{width:100%;min-width:150px}
+.state{margin-top:14px;max-height:280px;overflow:auto;font-family:var(--mono);font-size:11.5px;background:var(--void);border:1px solid var(--line);border-radius:8px;padding:10px}
+.state .entry{padding:6px 8px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
+.state .entry:last-child{border-bottom:0}
+.state .entry .k{color:var(--sage);font-weight:600}
+.device.b .state .entry .k{color:var(--amber)}
+.state .entry .v{color:var(--text);word-break:break-all}
+.state .entry .m{color:var(--dim);font-size:10px;grid-column:1/-1}
+.state .entry.tomb{opacity:0.5}
+.state .entry.tomb .v{text-decoration:line-through;color:var(--coral)}
+.state .entry .del{background:transparent;color:var(--coral);border:1px solid var(--coral);padding:2px 6px;border-radius:4px;font-size:10px;font-family:var(--mono);cursor:pointer}
+.state .entry .del:hover{background:var(--coral);color:var(--void)}
+.diff-panel{grid-column:1/-1;margin-top:16px;background:var(--deep);border:1px solid var(--line);border-radius:12px;padding:16px 20px}
+.diff-panel h3{margin-bottom:10px}
+.diff-cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-family:var(--mono);font-size:12px}
+@media(max-width:700px){.diff-cols{grid-template-columns:1fr}}
+.diff-cols .col{background:var(--void);border:1px solid var(--line);border-radius:8px;padding:10px}
+.diff-cols .col.local{border-left:2px solid var(--sage)}
+.diff-cols .col.remote{border-left:2px solid var(--amber)}
+.diff-cols .col.equal{border-left:2px solid var(--muted)}
+.diff-cols .col h4{font-family:var(--mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.14em;margin-bottom:6px}
+.diff-cols .col ul{list-style:none;padding:0}
+.diff-cols .col li{padding:2px 0;color:var(--text)}
+.log-panel{grid-column:1/-1;margin-top:16px;background:var(--deep);border:1px solid var(--line);border-radius:12px;padding:16px 20px}
+.log-panel h3{margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.log-panel h3 button{background:transparent;color:var(--muted);font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:0.14em;cursor:pointer;border:1px solid var(--line2);padding:4px 8px;border-radius:4px}
+.log{max-height:240px;overflow:auto;font-family:var(--mono);font-size:11.5px;background:var(--void);border:1px solid var(--line);border-radius:8px;padding:10px}
+.log .line{padding:3px 0;border-bottom:1px solid var(--line);color:var(--text)}
+.log .line:last-child{border-bottom:0}
+.log .t{color:var(--dim);margin-right:8px}
+.log .tag-a{color:var(--sage);font-weight:600}
+.log .tag-b{color:var(--amber);font-weight:600}
+.log .tag-sys{color:var(--muted)}
+.log .tag-merge{color:var(--coral);font-weight:600}
+.snap{grid-column:1/-1;margin-top:16px;background:var(--deep);border:1px solid var(--line);border-radius:12px;padding:16px 20px}
+.snap h3{margin-bottom:10px}
+.snap .cids{display:flex;gap:8px;flex-wrap:wrap;font-family:var(--mono);font-size:11px}
+.snap .cid{background:var(--surface);padding:6px 10px;border-radius:6px;color:var(--sage);cursor:pointer;border:1px solid var(--line);word-break:break-all}
+.snap .cid:hover{border-color:var(--sage)}
+.snap .hint{color:var(--muted);font-size:12px;margin-top:8px;font-style:italic}
+footer{padding:24px;text-align:center;color:var(--dim);font-family:var(--mono);font-size:11px;letter-spacing:0.1em;border-top:1px solid var(--line);margin-top:40px}
+footer a{color:var(--muted);text-decoration:none;margin:0 6px}
+footer a:hover{color:var(--sage)}
+.pill{display:inline-block;padding:2px 8px;border-radius:10px;font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;background:var(--sage-dim);color:var(--sage);margin-left:6px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--sage);margin-right:6px;vertical-align:middle}
+.dot.b{background:var(--amber)}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="glyph">◊</span> FallSync <span class="co">AI-Native Solutions</span></div>
+  <div class="tag">CRDT · LWW-Map · No cloud</div>
+</header>
+<main>
+  <div class="intro">
+    <h1>Multi-device sync <em>without a server</em></h1>
+    <p>Two devices, each with their own FallSync instance. Type on either side. Hit <b>Sync both ways</b> to merge deterministically. Concurrent writes on the same key resolve by highest Lamport timestamp, ties broken by nodeId lex order.</p>
+  </div>
+
+  <div class="controls">
+    <div class="doc">docId: <span id="docId"></span></div>
+    <button class="btn ghost" id="btnConcurrent">Concurrent-write test</button>
+    <button class="btn ghost" id="btnResetA">Reset A</button>
+    <button class="btn ghost" id="btnResetB">Reset B</button>
+    <button class="btn ghost" id="btnClear">Clear log</button>
+  </div>
+
+  <div class="grid">
+    <div class="device a">
+      <h2><span class="dot"></span>Device <em>A</em> <span class="pill" id="pillA">local</span></h2>
+      <div class="id" id="idA"></div>
+      <div class="clock" id="clockA">lamport: 0</div>
+      <div class="row">
+        <input class="k" id="keyA" placeholder="key" value="name">
+        <input class="v" id="valA" placeholder="value" value="alice">
+        <button class="btn" id="setA">Set</button>
+      </div>
+      <div class="row">
+        <input id="delKeyA" placeholder="key to delete">
+        <button class="btn coral" id="delA">Delete</button>
+      </div>
+      <h3 style="margin-top:16px">State</h3>
+      <div class="state" id="stateA"></div>
+    </div>
+
+    <div class="middle">
+      <button class="btn amber" id="syncAtoB">A → B</button>
+      <button class="btn amber" id="syncBtoA">B → A</button>
+      <button class="btn" id="syncBoth">Sync both ways</button>
+      <button class="btn ghost" id="showDiff">Show diff</button>
+    </div>
+
+    <div class="device b">
+      <h2><span class="dot b"></span>Device <em>B</em> <span class="pill" id="pillB" style="background:var(--amber-dim);color:var(--amber)">local</span></h2>
+      <div class="id" id="idB"></div>
+      <div class="clock" id="clockB">lamport: 0</div>
+      <div class="row">
+        <input class="k" id="keyB" placeholder="key" value="name">
+        <input class="v" id="valB" placeholder="value" value="alicia">
+        <button class="btn" id="setB">Set</button>
+      </div>
+      <div class="row">
+        <input id="delKeyB" placeholder="key to delete">
+        <button class="btn coral" id="delB">Delete</button>
+      </div>
+      <h3 style="margin-top:16px">State</h3>
+      <div class="state" id="stateB"></div>
+    </div>
+
+    <div class="diff-panel">
+      <h3>Diff <span style="color:var(--muted);font-family:var(--sans);text-transform:none;letter-spacing:normal;font-size:13px">— per key, who wins</span></h3>
+      <div class="diff-cols">
+        <div class="col local"><h4>A wins</h4><ul id="diffLocal"></ul></div>
+        <div class="col equal"><h4>Equal</h4><ul id="diffEqual"></ul></div>
+        <div class="col remote"><h4>B wins</h4><ul id="diffRemote"></ul></div>
+      </div>
+    </div>
+
+    <div class="snap">
+      <h3>Snapshots <span style="color:var(--muted);font-family:var(--sans);text-transform:none;letter-spacing:normal;font-size:13px">— content-addressed via SHA-256 (FallStore ready)</span></h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <button class="btn" id="snapA">Snapshot A → CID</button>
+        <button class="btn" id="snapB">Snapshot B → CID</button>
+      </div>
+      <div class="cids" id="cidList"></div>
+      <div class="hint">Click a CID to load that snapshot into the highlighted device (last-clicked snapshotter). Snapshots persist in localStorage as a fallback when FallStore isn't attached.</div>
+    </div>
+
+    <div class="log-panel">
+      <h3>Op log <button id="btnClearLog">Clear</button></h3>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+</main>
+<footer>
+  <div>◊ FallSync · CRDT multi-device sync · MIT · <a href="https://github.com/sjgant80-hub/fallsync">source</a> · <a href="https://sjgant80-hub.github.io/falllink/">FallLink</a> · <a href="https://sjgant80-hub.github.io/fallstore/">FallStore</a></div>
+</footer>
+
+<script type="module">
+import { FallSync } from './fallsync.js';
+
+const DOC_ID = 'demo-doc-' + (localStorage.getItem('fallsync-demo-doc') || (() => {
+  const id = Math.random().toString(36).slice(2, 8);
+  localStorage.setItem('fallsync-demo-doc', id);
+  return id;
+})());
+document.getElementById('docId').textContent = DOC_ID;
+
+const nodeIdA = 'node-A-' + Math.random().toString(36).slice(2, 8);
+const nodeIdB = 'node-B-' + Math.random().toString(36).slice(2, 8);
+document.getElementById('idA').textContent = nodeIdA;
+document.getElementById('idB').textContent = nodeIdB;
+
+let A = new FallSync({ nodeId: nodeIdA, docId: DOC_ID });
+let B = new FallSync({ nodeId: nodeIdB, docId: DOC_ID });
+
+const logEl = document.getElementById('log');
+function log(tag, msg) {
+  const line = document.createElement('div');
+  line.className = 'line';
+  const cls = tag === 'A' ? 'tag-a' : tag === 'B' ? 'tag-b' : tag === 'MERGE' ? 'tag-merge' : 'tag-sys';
+  const t = new Date().toLocaleTimeString();
+  line.innerHTML = `<span class="t">${t}</span><span class="${cls}">[${tag}]</span> ${msg}`;
+  logEl.insertBefore(line, logEl.firstChild);
+}
+
+function shortHash(h) { return h ? h.slice(0, 8) : ''; }
+
+function renderDevice(inst, elId, side) {
+  const el = document.getElementById(elId);
+  el.innerHTML = '';
+  const entries = inst.entriesAll().sort((a, b) => a.key.localeCompare(b.key));
+  if (!entries.length) {
+    el.innerHTML = '<div style="color:var(--dim);padding:8px;font-style:italic">empty</div>';
+  } else {
+    for (const e of entries) {
+      const row = document.createElement('div');
+      row.className = 'entry' + (e.deleted ? ' tomb' : '');
+      const valStr = e.deleted ? '(tombstone)' : JSON.stringify(e.value);
+      row.innerHTML = `
+        <div><span class="k">${escapeHtml(e.key)}</span> <span class="v">${escapeHtml(valStr)}</span></div>
+        <button class="del" data-k="${escapeHtml(e.key)}">×</button>
+        <div class="m">ts=${e.ts} · node=${e.nodeId.slice(-8)} · hash=${shortHash(e.hash)}${e.deleted ? ' · DELETED' : ''}</div>
+      `;
+      el.appendChild(row);
+    }
+    el.querySelectorAll('.del').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const k = btn.getAttribute('data-k');
+        await inst.delete(k);
+        log(side, `delete "${k}"`);
+        renderAll();
+      });
+    });
+  }
+  document.getElementById(side === 'A' ? 'clockA' : 'clockB').textContent = 'lamport: ' + inst.lamport;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function renderDiff() {
+  const d = A.diff(B.getState());
+  const fill = (id, arr) => {
+    const el = document.getElementById(id);
+    el.innerHTML = arr.length ? arr.map(k => `<li>${escapeHtml(k)}</li>`).join('') : '<li style="color:var(--dim);font-style:italic">—</li>';
+  };
+  fill('diffLocal', d.local);
+  fill('diffEqual', d.equal);
+  fill('diffRemote', d.remote);
+}
+
+function renderAll() {
+  renderDevice(A, 'stateA', 'A');
+  renderDevice(B, 'stateB', 'B');
+  renderDiff();
+}
+
+document.getElementById('setA').addEventListener('click', async () => {
+  const k = document.getElementById('keyA').value.trim();
+  const v = document.getElementById('valA').value;
+  if (!k) return;
+  await A.set(k, v);
+  log('A', `set "${k}" = ${JSON.stringify(v)} · ts=${A.lamport}`);
+  renderAll();
+});
+document.getElementById('setB').addEventListener('click', async () => {
+  const k = document.getElementById('keyB').value.trim();
+  const v = document.getElementById('valB').value;
+  if (!k) return;
+  await B.set(k, v);
+  log('B', `set "${k}" = ${JSON.stringify(v)} · ts=${B.lamport}`);
+  renderAll();
+});
+document.getElementById('delA').addEventListener('click', async () => {
+  const k = document.getElementById('delKeyA').value.trim();
+  if (!k) return;
+  await A.delete(k);
+  log('A', `delete "${k}"`);
+  renderAll();
+});
+document.getElementById('delB').addEventListener('click', async () => {
+  const k = document.getElementById('delKeyB').value.trim();
+  if (!k) return;
+  await B.delete(k);
+  log('B', `delete "${k}"`);
+  renderAll();
+});
+
+document.getElementById('syncAtoB').addEventListener('click', () => {
+  const changed = B.merge(A.getState());
+  log('MERGE', `A → B · ${changed.length} key(s) changed: ${changed.join(', ') || '(none)'}`);
+  renderAll();
+});
+document.getElementById('syncBtoA').addEventListener('click', () => {
+  const changed = A.merge(B.getState());
+  log('MERGE', `B → A · ${changed.length} key(s) changed: ${changed.join(', ') || '(none)'}`);
+  renderAll();
+});
+document.getElementById('syncBoth').addEventListener('click', () => {
+  const stateA = A.getState();
+  const stateB = B.getState();
+  const cA = A.merge(stateB);
+  const cB = B.merge(stateA);
+  log('MERGE', `both ways · A gained ${cA.length}, B gained ${cB.length}`);
+  renderAll();
+});
+document.getElementById('showDiff').addEventListener('click', () => {
+  const d = A.diff(B.getState());
+  log('sys', `diff · A-wins: ${d.local.length}, B-wins: ${d.remote.length}, equal: ${d.equal.length}`);
+  renderDiff();
+});
+
+document.getElementById('btnConcurrent').addEventListener('click', async () => {
+  const key = 'race-' + Math.random().toString(36).slice(2, 6);
+  await A.set(key, 'from-A');
+  await B.set(key, 'from-B');
+  log('sys', `concurrent write on "${key}" · A ts=${A.entries.get(key).ts} node=${A.nodeId.slice(-8)} · B ts=${B.entries.get(key).ts} node=${B.nodeId.slice(-8)}`);
+  const cA = A.merge(B.getState());
+  const cB = B.merge(A.getState());
+  const winner = A.get(key);
+  log('MERGE', `race resolved · winner: ${JSON.stringify(winner)} (A gained ${cA.length}, B gained ${cB.length})`);
+  renderAll();
+});
+
+document.getElementById('btnResetA').addEventListener('click', () => {
+  A = new FallSync({ nodeId: nodeIdA, docId: DOC_ID });
+  log('A', 'reset');
+  renderAll();
+});
+document.getElementById('btnResetB').addEventListener('click', () => {
+  B = new FallSync({ nodeId: nodeIdB, docId: DOC_ID });
+  log('B', 'reset');
+  renderAll();
+});
+document.getElementById('btnClear').addEventListener('click', () => { logEl.innerHTML = ''; });
+document.getElementById('btnClearLog').addEventListener('click', () => { logEl.innerHTML = ''; });
+
+const cids = [];
+let lastSnapSide = 'A';
+async function doSnapshot(side) {
+  const inst = side === 'A' ? A : B;
+  const cid = await inst.snapshot();
+  cids.unshift({ cid, side, ts: Date.now() });
+  lastSnapSide = side;
+  renderCids();
+  log(side, `snapshot → ${cid.slice(0, 20)}…`);
+}
+function renderCids() {
+  const el = document.getElementById('cidList');
+  el.innerHTML = cids.slice(0, 8).map(({ cid, side }) =>
+    `<div class="cid" data-cid="${cid}" data-side="${side}"><b style="color:${side === 'A' ? 'var(--sage)' : 'var(--amber)'}">${side}</b> · ${cid.slice(0, 26)}…</div>`
+  ).join('');
+  el.querySelectorAll('.cid').forEach(el => {
+    el.addEventListener('click', async () => {
+      const cid = el.getAttribute('data-cid');
+      const target = lastSnapSide === 'A' ? B : A;
+      const targetName = lastSnapSide === 'A' ? 'B' : 'A';
+      try {
+        await target.loadSnapshot(cid);
+        log(targetName, `loaded snapshot ${cid.slice(0, 20)}…`);
+        renderAll();
+      } catch (e) { log('sys', `load failed: ${e.message}`); }
+    });
+  });
+}
+document.getElementById('snapA').addEventListener('click', () => doSnapshot('A'));
+document.getElementById('snapB').addEventListener('click', () => doSnapshot('B'));
+
+A.subscribe(evt => { if (evt.type === 'merge' || evt.type === 'load') renderAll(); });
+B.subscribe(evt => { if (evt.type === 'merge' || evt.type === 'load') renderAll(); });
+
+log('sys', `boot · doc ${DOC_ID} · A=${nodeIdA.slice(-8)} B=${nodeIdB.slice(-8)}`);
+renderAll();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
