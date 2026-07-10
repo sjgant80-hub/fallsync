@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "fallsync", "runtimeExecutable": "python", "runtimeArgs": ["-m", "http.server", "8734", "--directory", "C:/Users/sjgan/Downloads/fallsync"], "port": 8734 }
+  ]
+}

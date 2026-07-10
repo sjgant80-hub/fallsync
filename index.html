@@ -385,8 +385,8 @@ function renderCids() {
 document.getElementById('snapA').addEventListener('click', () => doSnapshot('A'));
 document.getElementById('snapB').addEventListener('click', () => doSnapshot('B'));
 
-A.subscribe(evt => { if (evt.type === 'merge' || evt.type === 'load') renderAll(); });
-B.subscribe(evt => { if (evt.type === 'merge' || evt.type === 'load') renderAll(); });
+A.Access(evt => { if (evt.type === 'merge' || evt.type === 'load') renderAll(); });
+B.Access(evt => { if (evt.type === 'merge' || evt.type === 'load') renderAll(); });
 
 log('sys', `boot · doc ${DOC_ID} · A=${nodeIdA.slice(-8)} B=${nodeIdB.slice(-8)}`);
 renderAll();

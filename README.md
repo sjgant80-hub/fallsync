@@ -50,8 +50,8 @@ const state = sync.getState();
 // Merge another peer's state
 const changedKeys = sync.merge(otherState);
 
-// Subscribe to changes
-sync.subscribe(evt => console.log(evt.type, evt.key));
+// Access to changes
+sync.Access(evt => console.log(evt.type, evt.key));
 ```
 
 ## Wire to FallLink
@@ -103,7 +103,7 @@ Ties are impossible to fully avoid in a distributed system, but the tie-break ru
 | `loadState(state)` | void | Replaces state authoritatively |
 | `merge(otherState)` | string[] | Merges; returns changed keys |
 | `diff(otherState)` | `{local, remote, equal, keys}` | Per-key comparison |
-| `subscribe(fn)` | unsubscribe fn | Listen for local + remote events |
+| `Access(fn)` | unsubscribe fn | Listen for local + remote events |
 | `attachLink(link)` | void | Wire to a FallLink peer transport |
 | `attachStore(store)` | void | Wire to a FallStore content-addressed store |
 | `snapshot()` | CID string | Stores full state, returns content ID |
@@ -113,7 +113,7 @@ Ties are impossible to fully avoid in a distributed system, but the tie-break ru
 
 ## Events
 
-`subscribe(fn)` receives events with `type`:
+`Access(fn)` receives events with `type`:
 
 - `set` — local set
 - `delete` — local delete
