@@ -16,13 +16,9 @@ function stableStringify(v) {
   return '{' + keys.map(k => JSON.stringify(k) + ':' + stableStringify(v[k])).join(',') + '}';
 }
 
-// LWW compare: higher timestamp wins; tie-break by nodeId lex order (higher wins).
-function entryWins(a, b) {
-  if (!b) return true;
-  if (!a) return false;
-  if (a.ts !== b.ts) return a.ts > b.ts;
-  return a.nodeId > b.nodeId;
-}
+// LWW compare: higher timestamp wins; tie-break by nodeId lex order (higher wins). The rule lives in crdt.mjs (pure,
+// mutation-tested), the one law the estate's shared foundation also merges by.
+import { entryWins } from './crdt.mjs';
 
 export class FallSync {
   constructor({ nodeId, docId } = {}) {
